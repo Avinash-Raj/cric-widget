@@ -1,27 +1,29 @@
-from gi.repository import WebKit, Gtk, Gdk
+from gi.repository import WebKit, Gtk, Gdk, GObject
 import signal
 import requests
 import time
+import re
 
 class BackgroundPaneCallbacks:
     pass
 
+
 class BackgroundPaneWebview(WebKit.WebView):
-    def __init__(self, score):
+    def __init__(self, score, title):
         WebKit.WebView.__init__(self)
         self.set_transparent(False)
         self.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0,0,0,0))
-        self.load_html_string('<HTML>'+\
-                              '<STYLE type="text/css">'+\
-                              'BODY { background: rgba(0,0,0,0);}'+\
-                              '</STYLE>'+\
-                              '<BODY>'+\
-                              '<p style="color:Red">' + score +'</p>'+\
-                              ''+\
-                              '</BODY>'+\
-                              '</HTML>',
-                              '')
+        score = ParseScore.split_scores(score)
+        self.load_html_string(ParseScore.generate_html(score, title), '')
         print("Webview loaded")
+        GObject.timeout_add_seconds(10, self.callback)
+
+    def callback(self):
+        score, title = ParseScore.get_scores()
+        score = ParseScore.split_scores(score)
+        self.load_html_string(ParseScore.generate_html(score, title),'')
+        return True
+
 
 class ParseScore():
     @classmethod
@@ -44,22 +46,68 @@ class ParseScore():
         for team in teams_list:
             for title in titles:
                 if team in title[1]:
-                    unique_ids.append(title[0])
+                    unique_ids.append(title)
 
-        unique_id = unique_ids[0]
+        unique_id = unique_ids[0][0]
         
         payload = {'unique_id': unique_id}
 
         out = requests.get('http://cricapi.com/api/cricketScore/', params=payload)
         match_info = out.json()
 
-        return match_info['score']
+        return match_info['score'], unique_ids[0][1]
+
+
+    @classmethod
+    def split_scores(cls, score):
+        if '*' in score:
+            m = re.search(r'^([^()]*)\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^)]+)', score)
+            score = m.group(1)
+            overs = m.group(2)
+            bat1 = m.group(3)
+            bat2 = m.group(4)
+            bowl = m.group(5)
+            return score, overs, bat1, bat2, bowl
+        return score
+
+    @classmethod
+    def generate_html(cls, score, title):
+        if type(score) == unicode:
+            return '''<HTML>
+                              <STYLE type="text/css">
+                              BODY { 
+                                   background: rgba(0,0,0,0);
+                                   background-color:  #009688;
+                                   }
+                              </STYLE>
+                              <BODY>
+                              <h2>''' + title + '''</h2>
+                              <p style="color:yellow">''' + score +'''</p>
+                               </BODY>
+                              </HTML>'''
+                              
+        else:
+            return '''<HTML>
+                              <STYLE type="text/css">
+                              BODY { background: rgba(0,0,0,0);
+                                      background-color:  #009688;
+                              }
+                              </STYLE>
+                              <BODY>
+                              <h2>''' + title + '''</h2>
+                              <p style="color:Blue">Score: ''' + score[0] + '''</p>
+                              <p style="color: #cddc39">overs: ''' + score[1] +'''</p>
+                              <p style="color:Orange">''' + score[2] +'''</p>
+                              <p style="color:yellow">''' + score[3] +'''</p>
+                              <p style="color:Brown">''' + score[4] +'''</p>
+                              </BODY>
+                              </HTML>'''
 
 
 class BackgroundPaneWin(Gtk.Window):
     def __init__(self, address="127.0.0.1", port=54541):
         Gtk.Window.__init__(self, title="Live cricket Scores")
-        self.set_title("MyApp1")
+        self.set_title("Live IPL cricket Scores")
         self.set_size_request(400,200)
         #Set transparency
         screen = self.get_screen()
@@ -68,13 +116,9 @@ class BackgroundPaneWin(Gtk.Window):
         self.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0,0,0,0))
 
         #parse matchlist and score
-        match_description = ParseScore.get_scores()
-        self.view = BackgroundPaneWebview(match_description)
-        
-        if '*' in match_description:
-            while True:
-                self.view = BackgroundPaneWebview(match_description)
-                time.sleep(15)
+        score, title = ParseScore.get_scores()        
+
+        self.view = BackgroundPaneWebview(score, title)
 
         #Add all the parts
         
@@ -82,7 +126,7 @@ class BackgroundPaneWin(Gtk.Window):
         
         #self.add(box)
         box.pack_start(self.view, True, True, 0)
-        self.set_decorated(False)
+        self.set_decorated(True)
         self.connect("destroy", lambda q: Gtk.main_quit())
         f = Gtk.Frame()
         f.add(box)
@@ -100,6 +144,7 @@ class BackgroundPane:
         #Add all the parts
         self.root = params['root']
         self.win = BackgroundPaneWin()
+
         print("Pane loaded")
 
     def init(self):
@@ -148,5 +193,5 @@ class App:
 
 if __name__ == '__main__':
     print("Loading app...")
-    app = App({'w': 380, 'h': 180})
+    app = App()
     app.run()
