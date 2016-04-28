@@ -10,7 +10,7 @@
 
 1. It automatically refreshes the score for every 10 seconds. So you don't need to kill and rerun the program again and again.
 
-#####Screenshots:
+#####Screenshot:
 
-![Match Going to start](http://i.stack.imgur.com/FmTpH.png)
+![Match Going to start](http://i.stack.imgur.com/jGQ62.png)
 
