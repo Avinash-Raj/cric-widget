@@ -9,19 +9,19 @@ class BackgroundPaneCallbacks:
 
 
 class BackgroundPaneWebview(WebKit.WebView):
-    def __init__(self, score, title):
+    def __init__(self, score, title, commentary):
         WebKit.WebView.__init__(self)
         self.set_transparent(False)
         self.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0,0,0,0))
         score = ParseScore.split_scores(score)
-        self.load_html_string(ParseScore.generate_html(score, title), '')
+        self.load_html_string(ParseScore.generate_html(score, title, commentary), '')
         print("Webview loaded")
         GObject.timeout_add_seconds(10, self.callback)
 
     def callback(self):
-        score, title = ParseScore.get_scores()
+        score, title, commentary = ParseScore.get_scores()
         score = ParseScore.split_scores(score)
-        self.load_html_string(ParseScore.generate_html(score, title),'')
+        self.load_html_string(ParseScore.generate_html(score, title, commentary),'')
         return True
 
 
@@ -49,13 +49,19 @@ class ParseScore():
                     unique_ids.append(title)
 
         unique_id = unique_ids[0][0]
-        
+        #print '\033[92m' + unique_id + '\033[0m'
         payload = {'unique_id': unique_id}
 
         out = requests.get('http://cricapi.com/api/cricketScore/', params=payload)
         match_info = out.json()
+        comment = requests.get('http://cricapi.com/api/cricketCommentary/', params=payload)
+        commentary = comment.json()['commentary']
+        commentary = re.sub(r'\s*\n\s*', '', commentary)
+        list_comm = re.split(r'\.(?!\d)', commentary)
+        final_comment = '.'.join(list_comm[:5])
 
-        return match_info['score'], unique_ids[0][1]
+        return match_info['score'], unique_ids[0][1], final_comment
+
 
 
     @classmethod
@@ -71,7 +77,7 @@ class ParseScore():
         return score
 
     @classmethod
-    def generate_html(cls, score, title):
+    def generate_html(cls, score, title, commentary):
         if type(score) == unicode:
             return '''<HTML>
                               <STYLE type="text/css">
@@ -83,6 +89,7 @@ class ParseScore():
                               <BODY>
                               <h2>''' + title + '''</h2>
                               <p style="color:yellow">''' + score +'''</p>
+                              ''' + commentary + '''
                                </BODY>
                               </HTML>'''
                               
@@ -100,6 +107,7 @@ class ParseScore():
                               <p style="color:Orange">''' + score[2] +'''</p>
                               <p style="color:yellow">''' + score[3] +'''</p>
                               <p style="color:Brown">''' + score[4] +'''</p>
+                              ''' + commentary + '''
                               </BODY>
                               </HTML>'''
 
@@ -116,9 +124,9 @@ class BackgroundPaneWin(Gtk.Window):
         self.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0,0,0,0))
 
         #parse matchlist and score
-        score, title = ParseScore.get_scores()        
+        score, title, commentary = ParseScore.get_scores()        
 
-        self.view = BackgroundPaneWebview(score, title)
+        self.view = BackgroundPaneWebview(score, title, commentary)
 
         #Add all the parts
         
